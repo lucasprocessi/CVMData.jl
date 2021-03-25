@@ -1,7 +1,7 @@
 name = "CVMData"
 uuid = "ba2fb910-570c-4d37-84a8-df9f0d98f1b0"
 authors = ["LDPRO "]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
