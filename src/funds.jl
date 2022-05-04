@@ -3,6 +3,9 @@ module Funds
 
     using Dates
     import ..YearMonths
+    import ..Downloads
+    import ..CSV
+    import ..ZipFile
     import ..HTTP
 
     struct FundData
@@ -20,49 +23,22 @@ module Funds
     function get_month_quotes(ym::YearMonths.YearMonth)::Vector{FundData}
         @assert ym >= YearMonths.YearMonth(2017, 1)
 
-        raw = _get_data(ym)
+        data = _get_data(ym)
 
         out = Vector{FundData}()
 
-        header = split(String(raw[1]), ";")
+        for row in data
 
-        for i in 2:length(raw)
+            fund_type = get(row, :TP_FUNDO, nothing)
+            cnpj = row.CNPJ_FUNDO
+            date = row.DT_COMPTC
+            total_value = row.VL_TOTAL
+            quota_value = row.VL_QUOTA
+            net_worth = row.VL_PATRIM_LIQ
+            deposits = row.CAPTC_DIA
+            withdraws = row.RESG_DIA
+            number_quota_holders = row.NR_COTST
 
-            line = raw[i]
-
-            if line == ""
-                continue
-            end
-
-            s = split(String(line), ";")
-
-            if ym <= YearMonths.YearMonth(2020,3)
-
-                @assert length(s) == 8 "bad CVM data, this line should have 8 fields: $s"
-                fund_type = nothing
-                cnpj = String(s[1])
-                date = Date(String(s[2]))
-                total_value = parse(Float64, String(s[3]))
-                quota_value = parse(Float64, String(s[4]))
-                net_worth = parse(Float64, String(s[5]))
-                deposits = parse(Float64, String(s[6]))
-                withdraws = parse(Float64, String(s[7]))
-                number_quota_holders = parse(Int64, String(s[8]))
-
-            else
-                # after 2020-03
-                @assert length(s) == 9 "bad CVM data, this line should have 9 fields: $s"
-                fund_type = String(s[1])
-                cnpj = String(s[2])
-                date = Date(String(s[3]))
-                total_value = parse(Float64, String(s[4]))
-                quota_value = parse(Float64, String(s[5]))
-                net_worth = parse(Float64, String(s[6]))
-                deposits = parse(Float64, String(s[7]))
-                withdraws = parse(Float64, String(s[8]))
-                number_quota_holders = parse(Int64, String(s[9]))
-
-            end
             d = FundData(
                 fund_type, cnpj, date,
                 total_value, quota_value, net_worth,
@@ -75,23 +51,63 @@ module Funds
         return(out)
     end
 
-    function _get_url(ym::YearMonths.YearMonth)::String
+    function _get_url_monthly_zip(ym::YearMonths.YearMonth)::String
         str_year = "$(YearMonths.year(ym))"
         str_month = lpad("$(YearMonths.month(ym))", 2, "0")
-        url = "http://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS/inf_diario_fi_$str_year$str_month.csv"
+        url = "http://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS/inf_diario_fi_$str_year$str_month.zip"
         return url
     end
 
+    function _get_url_yearly_zip(ym::YearMonths.YearMonth)::String
+        str_year = "$(YearMonths.year(ym))"
+        url = "http://dados.cvm.gov.br/dados/FI/DOC/INF_DIARIO/DADOS/HIST/inf_diario_fi_$str_year.zip"
+        return url
+    end
+
+    function _get_file_name(ym::YearMonths.YearMonth)
+        str_year = "$(YearMonths.year(ym))"
+        str_month = lpad("$(YearMonths.month(ym))", 2, "0")
+        return "inf_diario_fi_$str_year$str_month.csv"
+    end
+
     function _get_data(ym::YearMonths.YearMonth)
-        url = _get_url(ym)
-        r = HTTP.get(url, status_exception = false)
-        if r.status == 200
-            return split(String(r.body), "\r\n")
-        elseif r.status == 404
-            throw(BoundsError("CVM fund data not found for $ym"))
-        else
-            error("error retrieving CVM fund data: $r")
+        # url = _get_url(ym)
+        # r = HTTP.get(url, status_exception = false)
+        # if r.status == 200
+        #     return split(String(r.body), "\r\n")
+        # elseif r.status == 404
+        #     throw(ErrorException("CVM fund data not found for $ym"))
+        # else
+        #     error("error retrieving CVM fund data: $r")
+        # end
+
+        localfile = "$(tempname()).zip"
+        
+        try
+            url = _get_url_monthly_zip(ym)
+            Downloads.download(url, localfile)
+        catch e
+            url = _get_url_yearly_zip(ym)
+            Downloads.download(url, localfile)
         end
+        @assert isfile(localfile)
+
+        fname = _get_file_name(ym)
+        zip = ZipFile.Reader(localfile)
+
+        for f in zip.files
+            if f.name == fname
+                ret = CSV.File(f, decimal='.', delim=';')
+                close(zip)
+                rm(localfile)
+                return ret
+            end
+        end
+
+        close(zip)
+        rm(localfile)
+        error("$fname not found in $url")
+        
     end
 
 end

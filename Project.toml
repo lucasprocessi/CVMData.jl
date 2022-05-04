@@ -4,7 +4,10 @@ authors = ["LDPRO "]
 version = "0.2.0"
 
 [deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 YearMonths = "c2c48e9c-33cf-11e9-2c9f-bfebf9880caf"
+ZipFile = "a5390f91-8eb1-5f08-bee0-b1d1ffed6cea"
